@@ -234,16 +234,15 @@ float noiseBlob(vec2 pos, vec2 center, float size, float time) {
     
     float organicRadius = size * (1.0 + edgeNoise);
     
-    // COMPLETELY DIFFERENT APPROACH: Use inverse square for natural falloff
     float normalizedDist = dist / organicRadius;
     if (normalizedDist >= 1.0) return 0.0;
     
-    // Natural quadratic falloff - no harsh transitions
+    // Natural quadratic falloff 
     float intensity = 1.0 - (normalizedDist * normalizedDist);
     return intensity * intensity; // Square again for even softer edges
 }
 
-// Gaussian blur function based on your example
+// Gaussian blur function
 float gaussian(vec2 i, float sigma) {
     return exp( -0.5 * dot(i/sigma, i/sigma) ) / ( 6.28 * sigma * sigma );
 }
@@ -252,12 +251,13 @@ vec3 gaussianBlur(sampler2D tex, vec2 uv) {
     vec3 result = vec3(0.0);
     float totalWeight = 0.0;
     
-    int samples = 15; // Reduced for performance
+    int samples = 5; 
     float sigma = float(samples) * 0.5;
-    vec2 texelSize = vec2(1.0) / vec2(800.0, 600.0); // Approximate texture size
+    vec2 texelSize = 1.0 / u_resolution; // Fix: Use dynamic resolution
     
-    for (int x = -7; x <= 7; x++) {
-        for (int y = -7; y <= 7; y++) {
+    // Fix: Change from -7,7 to -2,2 to match samples=5
+    for (int x = -2; x <= 2; x++) {
+        for (int y = -2; y <= 2; y++) {
             vec2 offset = vec2(float(x), float(y));
             float weight = gaussian(offset, sigma);
             vec2 sampleUV = uv + offset * texelSize * 2.0;
