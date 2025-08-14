@@ -130,7 +130,7 @@ function initializeOptimizedShaders() {
                 
                 tempImg.onload = function() {
                     // Apply heavy CSS filter blur to canvas context
-                    ctx.filter = 'blur(25px)'; // REALLY HEAVY blur - adjust this!
+                    ctx.filter = 'blur(15px)'; 
                     ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
                     
                     // Create texture from blurred canvas
