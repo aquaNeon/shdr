@@ -130,7 +130,7 @@ function initializeOptimizedShaders() {
                 
                 tempImg.onload = function() {
                     // Apply heavy CSS filter blur to canvas context
-                    ctx.filter = 'blur(17px)'; 
+                    ctx.filter = 'blur(25px)'; // REALLY HEAVY blur - adjust this!
                     ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
                     
                     // Create texture from blurred canvas
@@ -311,10 +311,10 @@ void main() {
     float o = (fract(s) - 0.5) * u_distortion; 
     vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
     
-    // Background is pre-blurred - just simple texture lookup! (1 sample vs 225)
+    // Background is pre-blurred simple texture lookup! (1 sample vs 225)
     vec3 backgroundColor = vec3(0.0);
     if (u_has_background) {
-        backgroundColor = texture2D(u_background_texture, vUv).rgb * 0.85;
+        backgroundColor = texture2D(u_background_texture, distortedUV ).rgb * 0.85;
     }
     
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
