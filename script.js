@@ -314,8 +314,11 @@ void main() {
     // Background is pre-blurred simple texture lookup! (1 sample vs 225)
     vec3 backgroundColor = vec3(0.0);
     if (u_has_background) {
-        backgroundColor = texture2D(u_background_texture, distortedUV ).rgb * 0.85;
-    }
+        vec2 clampedDistortedUV = clamp(distortedUV, vec2(0.0), vec2(1.0));
+        backgroundColor = texture2D(u_background_texture, clampedDistortedUV).rgb * 0.85;    
+}
+
+
     
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
     vec2 blob1Corrected = vec2(u_blob1_pos.x * u_aspect, u_blob1_pos.y);
