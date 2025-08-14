@@ -1,5 +1,5 @@
 
-//  Box blur happens ONC + make texture 
+//  Box blur happens but no break image  
 window.addEventListener('load', () => {
     const performanceDelay = navigator.hardwareConcurrency < 4 ? 800 : 500;
     setTimeout(initializeOptimizedShaders, performanceDelay);
@@ -54,227 +54,138 @@ function initializeOptimizedShaders() {
         boundaries.push(1.0); return boundaries; 
     }
     
-function generateLookupTexture(boundaries, width = 512) {
-    const data = new Uint8Array(width * 4); let boundaryIndex = 0; 
-    for (let i = 0; i < width; i++) { 
-        const u = i / (width - 1); 
-        while (boundaryIndex < boundaries.length - 2 && u >= boundaries[boundaryIndex + 1]) { boundaryIndex++; } 
-        data[i * 4] = boundaryIndex; data[i * 4 + 3] = 255; 
-    } 
-    const texture = new THREE.DataTexture(data, width, 1, THREE.RGBAFormat); 
-    texture.needsUpdate = true; return texture; 
-}
-
-// Background image loading functions
-function createFallbackTexture() {
-    const size = 256;
-    const data = new Uint8Array(size * size * 3);
-    for (let i = 0; i < size; i++) {
-        for (let j = 0; j < size; j++) {
-            const idx = (i * size + j) * 3;
-            const x = i / size; const y = j / size;
-            data[idx] = Math.sin(x * Math.PI) * 255;
-            data[idx + 1] = Math.sin(y * Math.PI * 2) * 255;
-            data[idx + 2] = Math.sin((x + y) * Math.PI) * 255;
-        }
+    function generateLookupTexture(boundaries, width = 512) {
+        const data = new Uint8Array(width * 4); let boundaryIndex = 0; 
+        for (let i = 0; i < width; i++) { 
+            const u = i / (width - 1); 
+            while (boundaryIndex < boundaries.length - 2 && u >= boundaries[boundaryIndex + 1]) { boundaryIndex++; } 
+            data[i * 4] = boundaryIndex; data[i * 4 + 3] = 255; 
+        } 
+        const texture = new THREE.DataTexture(data, width, 1, THREE.RGBAFormat); 
+        texture.needsUpdate = true; return texture; 
     }
-    const texture = new THREE.DataTexture(data, size, size, THREE.RGBFormat);
-    texture.needsUpdate = true;
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    return texture;
-}
 
-function loadBackgroundTexture(imageUrl) {
-    return new Promise((resolve) => {
-        if (!imageUrl) { resolve(null); return; }
-        const testImg = new Image();
-        testImg.crossOrigin = 'anonymous';
-        testImg.onload = function() {
-            const loader = new THREE.TextureLoader();
-            loader.setCrossOrigin('anonymous');
-            loader.load(imageUrl, (texture) => {
-                texture.wrapS = THREE.ClampToEdgeWrapping;
-                texture.wrapT = THREE.ClampToEdgeWrapping;
-                texture.minFilter = THREE.LinearFilter;
-                texture.magFilter = THREE.LinearFilter;
-                resolve(texture);
-            }, undefined, () => resolve(createFallbackTexture()));
-        };
-        testImg.onerror = () => resolve(createFallbackTexture());
-        testImg.src = imageUrl;
-    });
-}
-
-// NEW: Create box-blurred texture once during initialization (FAST!)
-function createBoxBlurTexture(originalTexture) {
-    return new Promise((resolve) => {
-        if (!originalTexture) {
-            resolve(null);
-            return;
+    // Background image loading functions
+    function createFallbackTexture() {
+        const size = 256;
+        const data = new Uint8Array(size * size * 3);
+        for (let i = 0; i < size; i++) {
+            for (let j = 0; j < size; j++) {
+                const idx = (i * size + j) * 3;
+                const x = i / size; const y = j / size;
+                data[idx] = Math.sin(x * Math.PI) * 255;
+                data[idx + 1] = Math.sin(y * Math.PI * 2) * 255;
+                data[idx + 2] = Math.sin((x + y) * Math.PI) * 255;
+            }
         }
-        
-        // Create a temporary scene to render the blur
-        const blurScene = new THREE.Scene();
-        const blurCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -1, 1);
-        const blurRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
-        
-        const blurSize = 512; // Fixed size for blur texture
-        blurRenderer.setSize(blurSize, blurSize);
-        
-        const blurMaterial = new THREE.ShaderMaterial({
-            uniforms: {
-                u_texture: { value: originalTexture },
-                u_resolution: { value: new THREE.Vector2(blurSize, blurSize) }
-            },
-            vertexShader: `
-                varying vec2 vUv;
-                void main() {
-                    vUv = uv;
-                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-                }
-            `,
-            fragmentShader: `
-                uniform sampler2D u_texture;
-                uniform vec2 u_resolution;
-                varying vec2 vUv;
-                
-                vec3 fastBoxBlur(sampler2D tex, vec2 uv) {
-                    vec3 result = vec3(0.0);
-                    vec2 texelSize = 1.0 / u_resolution;
-                    
-                    // Box blur - 9 samples
-                    for (int x = -1; x <= 1; x++) {
-                        for (int y = -1; y <= 1; y++) {
-                            vec2 sampleUV = clamp(uv + vec2(float(x), float(y)) * texelSize, vec2(0.0), vec2(1.0));
-                            result += texture2D(tex, sampleUV).rgb;
-                        }
-                    }
-                    
-                    return result / 9.0 * 0.85; // Average and dim
-                }
-                
-                void main() {
-                    vec3 blurred = fastBoxBlur(u_texture, vUv);
-                    gl_FragColor = vec4(blurred, 1.0);
-                }
-            `
-        });
-        
-        const blurPlane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), blurMaterial);
-        blurScene.add(blurPlane);
-        
-        // Render to texture
-        const renderTarget = new THREE.WebGLRenderTarget(blurSize, blurSize, {
-            minFilter: THREE.LinearFilter,
-            magFilter: THREE.LinearFilter,
-            wrapS: THREE.ClampToEdgeWrapping,
-            wrapT: THREE.ClampToEdgeWrapping
-        });
-        
-        blurRenderer.setRenderTarget(renderTarget);
-        blurRenderer.render(blurScene, blurCamera);
-        blurRenderer.setRenderTarget(null);
-        
-        // Clean up temporary objects
-        blurRenderer.dispose();
-        blurMaterial.dispose();
-        blurPlane.geometry.dispose();
-        blurScene.remove(blurPlane);
-        
-        resolve(renderTarget.texture);
-    });
-}
+        const texture = new THREE.DataTexture(data, size, size, THREE.RGBFormat);
+        texture.needsUpdate = true;
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        return texture;
+    }
 
-async function initShader_StepByStep(container, onComplete) {
-    const state = {};
-    const runStep = async (step) => {
-        try {
-            switch(step) {
-                case 0:
-                    instanceCount++; 
-                    state.isLowQuality = perfConfig.isMobile || instanceCount > 2;
-                    const p = container.getAttribute('data-width-preset') || 'balanced'; 
-                    const ps = { 'balanced': { c: 5, v: 1.0, d: 0.2 }, 'extremes': { c: 4, v: 1.8, d: 0.15 }, 'minimal': { c: 3, v: 1.5, d: 0.1 }, 'dense': { c: 7, v: 0.8, d: 0.25 } }; 
-                    const c = ps[p] || ps['balanced'];
-                    state.settings = { 
-                        columns: parseInt(container.getAttribute('data-columns')) || c.c, 
-                        noise: parseFloat(container.getAttribute('data-noise')) || (state.isLowQuality ? 0.015 : 0.035),
-                        distortion: parseFloat(container.getAttribute('data-distortion')) || (c.d * 1.5), 
-                        widthVariation: parseFloat(container.getAttribute('data-width-variation')) || c.v, 
-                        sensitivityOne: parseFloat(container.getAttribute('data-sensitivity-one')) || 0.08,
-                        sensitivityTwo: parseFloat(container.getAttribute('data-sensitivity-two')) || 0.05, 
-                        sensitivityThree: parseFloat(container.getAttribute('data-sensitivity-three')) || 0.1,
-                        hoverEnabled: container.getAttribute('data-hover') !== 'false',
-                        backgroundImage: container.getAttribute('data-background-image') || null
-                    };
-                    const boundaries = generateColumnBoundaries(state.settings.columns, state.settings.widthVariation, parseInt(container.getAttribute('data-seed')) || 1234);
-                    state.lookupTexture = generateLookupTexture(boundaries); 
-                    
-                    // Load original background texture
-                    state.backgroundTexture = await loadBackgroundTexture(state.settings.backgroundImage);
-                    
-                    // NEW: Pre-blur the background texture once with fast box blur
-                    console.log('Creating box-blurred texture...');
-                    state.blurredBackgroundTexture = await createBoxBlurTexture(state.backgroundTexture);
-                    console.log('Box-blurred texture created successfully!');
-                    
-                    setTimeout(() => runStep(1), 20);
-                    break;
-                    
-                case 1:
-                    state.scene = new THREE.Scene(); 
-                    state.camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -1, 1);
-                    state.renderer = new THREE.WebGLRenderer({ 
-                        alpha: true, 
-                        antialias: false,
-                        powerPreference: "high-performance",
-                        precision: "lowp",
-                        stencil: false,
-                        depth: false,
-                        premultipliedAlpha: false
-                    });
-                    state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-                    const { clientWidth, clientHeight } = container;
-                    state.renderer.setSize(
-                        Math.floor(clientWidth * perfConfig.resolutionScale), 
-                        Math.floor(clientHeight * perfConfig.resolutionScale)
-                    );
-                    state.renderer.domElement.style.width = '100%'; 
-                    state.renderer.domElement.style.height = '100%';
-                    container.appendChild(state.renderer.domElement); 
-                    setTimeout(() => runStep(2), 20); 
-                    break;
-                    
-                case 2:
-                    state.uniforms = { 
-                        u_time: { value: 0.0 }, 
-                        u_resolution: { value: new THREE.Vector2(container.clientWidth, container.clientHeight) }, 
-                        u_aspect: { value: container.clientWidth / container.clientHeight },
-                        u_blob1_pos: { value: new THREE.Vector2(0.3, 0.7) }, 
-                        u_blob2_pos: { value: new THREE.Vector2(0.6, 0.1) }, 
-                        u_blob3_pos: { value: new THREE.Vector2(0.9, 0.5) }, 
-                        u_column_lookup: { value: state.lookupTexture }, 
-                        u_noise: { value: state.settings.noise }, 
-                        u_distortion: { value: state.settings.distortion }, 
-                        u_color_one: { value: new THREE.Color(container.getAttribute('data-color-one') || '#5983f8') }, 
-                        u_size_one: { value: parseFloat(container.getAttribute('data-size-one')) || 0.7 }, 
-                        u_color_two: { value: new THREE.Color(container.getAttribute('data-color-two') || '#c1ff5b') }, 
-                        u_size_two: { value: parseFloat(container.getAttribute('data-size-two')) || 0.6 }, 
-                        u_use_three_color: { value: container.getAttribute('data-use-three-color') === 'true' }, 
-                        u_color_three: { value: new THREE.Color(container.getAttribute('data-color-three') || '#ffff5b') }, 
-                        u_size_three: { value: parseFloat(container.getAttribute('data-size-three')) || 0.65 },
-                        // Use the pre-blurred texture (no blur calculations in main shader!)
-                        u_background_texture: { value: state.blurredBackgroundTexture },
-                        u_has_background: { value: state.blurredBackgroundTexture !== null }
-                    };
-                    state.material = new THREE.ShaderMaterial({ 
-                        uniforms: state.uniforms, 
-                        transparent: true,
-                        precision: "lowp",
-                        vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`, 
+    function loadBackgroundTexture(imageUrl) {
+        return new Promise((resolve) => {
+            if (!imageUrl) { resolve(null); return; }
+            const testImg = new Image();
+            testImg.crossOrigin = 'anonymous';
+            testImg.onload = function() {
+                const loader = new THREE.TextureLoader();
+                loader.setCrossOrigin('anonymous');
+                loader.load(imageUrl, (texture) => {
+                    texture.wrapS = THREE.ClampToEdgeWrapping;
+                    texture.wrapT = THREE.ClampToEdgeWrapping;
+                    texture.minFilter = THREE.LinearFilter;
+                    texture.magFilter = THREE.LinearFilter;
+                    resolve(texture);
+                }, undefined, () => resolve(createFallbackTexture()));
+            };
+            testImg.onerror = () => resolve(createFallbackTexture());
+            testImg.src = imageUrl;
+        });
+    }
+
+    async function initShader_StepByStep(container, onComplete) {
+        const state = {};
+        const runStep = async (step) => {
+            try {
+                switch(step) {
+                    case 0:
+                        instanceCount++; 
+                        state.isLowQuality = perfConfig.isMobile || instanceCount > 2;
+                        const p = container.getAttribute('data-width-preset') || 'balanced'; 
+                        const ps = { 'balanced': { c: 5, v: 1.0, d: 0.2 }, 'extremes': { c: 4, v: 1.8, d: 0.15 }, 'minimal': { c: 3, v: 1.5, d: 0.1 }, 'dense': { c: 7, v: 0.8, d: 0.25 } }; 
+                        const c = ps[p] || ps['balanced'];
+                        state.settings = { 
+                            columns: parseInt(container.getAttribute('data-columns')) || c.c, 
+                            noise: parseFloat(container.getAttribute('data-noise')) || (state.isLowQuality ? 0.015 : 0.035),
+                            distortion: parseFloat(container.getAttribute('data-distortion')) || (c.d * 1.5), 
+                            widthVariation: parseFloat(container.getAttribute('data-width-variation')) || c.v, 
+                            sensitivityOne: parseFloat(container.getAttribute('data-sensitivity-one')) || 0.08,
+                            sensitivityTwo: parseFloat(container.getAttribute('data-sensitivity-two')) || 0.05, 
+                            sensitivityThree: parseFloat(container.getAttribute('data-sensitivity-three')) || 0.1,
+                            hoverEnabled: container.getAttribute('data-hover') !== 'false',
+                            backgroundImage: container.getAttribute('data-background-image') || null
+                        };
+                        const boundaries = generateColumnBoundaries(state.settings.columns, state.settings.widthVariation, parseInt(container.getAttribute('data-seed')) || 1234);
+                        state.lookupTexture = generateLookupTexture(boundaries); 
+                        state.backgroundTexture = await loadBackgroundTexture(state.settings.backgroundImage);
+                        setTimeout(() => runStep(1), 20);
+                        break;
+                        
+                    case 1:
+                        state.scene = new THREE.Scene(); 
+                        state.camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -1, 1);
+                        state.renderer = new THREE.WebGLRenderer({ 
+                            alpha: true, 
+                            antialias: false,
+                            powerPreference: "high-performance",
+                            precision: "lowp",
+                            stencil: false,
+                            depth: false,
+                            premultipliedAlpha: false
+                        });
+                        state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+                        const { clientWidth, clientHeight } = container;
+                        state.renderer.setSize(
+                            Math.floor(clientWidth * perfConfig.resolutionScale), 
+                            Math.floor(clientHeight * perfConfig.resolutionScale)
+                        );
+                        state.renderer.domElement.style.width = '100%'; 
+                        state.renderer.domElement.style.height = '100%';
+                        container.appendChild(state.renderer.domElement); 
+                        setTimeout(() => runStep(2), 20); 
+                        break;
+                        
+                    case 2:
+                        state.uniforms = { 
+                            u_time: { value: 0.0 }, 
+                            u_resolution: { value: new THREE.Vector2(container.clientWidth, container.clientHeight) }, 
+                            u_aspect: { value: container.clientWidth / container.clientHeight },
+                            u_blob1_pos: { value: new THREE.Vector2(0.3, 0.7) }, 
+                            u_blob2_pos: { value: new THREE.Vector2(0.6, 0.1) }, 
+                            u_blob3_pos: { value: new THREE.Vector2(0.9, 0.5) }, 
+                            u_column_lookup: { value: state.lookupTexture }, 
+                            u_noise: { value: state.settings.noise }, 
+                            u_distortion: { value: state.settings.distortion }, 
+                            u_color_one: { value: new THREE.Color(container.getAttribute('data-color-one') || '#5983f8') }, 
+                            u_size_one: { value: parseFloat(container.getAttribute('data-size-one')) || 0.7 }, 
+                            u_color_two: { value: new THREE.Color(container.getAttribute('data-color-two') || '#c1ff5b') }, 
+                            u_size_two: { value: parseFloat(container.getAttribute('data-size-two')) || 0.6 }, 
+                            u_use_three_color: { value: container.getAttribute('data-use-three-color') === 'true' }, 
+                            u_color_three: { value: new THREE.Color(container.getAttribute('data-color-three') || '#ffff5b') }, 
+                            u_size_three: { value: parseFloat(container.getAttribute('data-size-three')) || 0.65 },
+                            u_background_texture: { value: state.backgroundTexture },
+                            u_has_background: { value: state.backgroundTexture !== null }
+                        };
+                        state.material = new THREE.ShaderMaterial({ 
+                            uniforms: state.uniforms, 
+                            transparent: true,
+                            precision: "lowp",
+                            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`, 
 fragmentShader: `
 #ifdef GL_ES
 precision lowp float;
@@ -330,6 +241,19 @@ float noiseBlob(vec2 pos, vec2 center, float size, float time) {
     return intensity * intensity;
 }
 
+// SIMPLE 5-sample blur - much faster than Gaussian!
+vec3 fastBlur(sampler2D tex, vec2 uv) {
+    vec3 center = texture2D(tex, uv).rgb;
+    vec2 texelSize = 1.0 / u_resolution;
+    
+    vec3 right = texture2D(tex, clamp(uv + vec2(texelSize.x, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 left = texture2D(tex, clamp(uv - vec2(texelSize.x, 0.0), vec2(0.0), vec2(1.0))).rgb;
+    vec3 up = texture2D(tex, clamp(uv + vec2(0.0, texelSize.y), vec2(0.0), vec2(1.0))).rgb;
+    vec3 down = texture2D(tex, clamp(uv - vec2(0.0, texelSize.y), vec2(0.0), vec2(1.0))).rgb;
+    
+    return (center * 0.4 + right * 0.15 + left * 0.15 + up * 0.15 + down * 0.15) * 0.85;
+}
+
 void main() { 
     vec4 d = texture2D(u_column_lookup, vec2(vUv.x, 0.0)); 
     float i = d.r * 255.0; 
@@ -337,10 +261,10 @@ void main() {
     float o = (fract(s) - 0.5) * u_distortion; 
     vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
     
-    // OPTIMIZED: Background is pre-blurred - just a simple texture lookup!
+    // Background with fast blur (only 5 samples!)
     vec3 backgroundColor = vec3(0.0);
     if (u_has_background) {
-        backgroundColor = texture2D(u_background_texture, vUv).rgb; // Already blurred during init!
+        backgroundColor = fastBlur(u_background_texture, vUv);
     }
     
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
@@ -591,7 +515,6 @@ void main() {
     
     containers.forEach(container => masterObserver.observe(container));
 }
-
 
 
 // ok solution 
