@@ -311,28 +311,22 @@ void main() {
     float o = (fract(s) - 0.5) * u_distortion; 
     vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
     
-    // Background sampling with proper aspect ratio handling
-    vec3 backgroundColor = vec3(0.0);
-    if (u_has_background) {
-        // Use original vUv for background to maintain proper proportions
-        vec2 backgroundUV = vUv;
-        
-        // Apply aspect ratio correction to center the image properly
-        if (u_aspect > 1.0) {
-            // Wide aspect ratio - scale Y to fit
-            backgroundUV.y = (backgroundUV.y - 0.5) / u_aspect + 0.5;
-        } else {
-            // Tall aspect ratio - scale X to fit  
-            backgroundUV.x = (backgroundUV.x - 0.5) * u_aspect + 0.5;
-        }
-        
-        // Apply the distortion AFTER aspect correction
-        backgroundUV.x += o;
-        
-        vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
-        backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
-    }
 
+    // Background sampling with simple cover and distortion
+vec3 backgroundColor = vec3(0.0);
+if (u_has_background) {
+    vec2 backgroundUV = vUv;
+    
+    // Simple cover behavior - always crop to fit container aspect
+    backgroundUV.x = (backgroundUV.x - 0.5) * max(1.0, u_aspect) + 0.5;
+    backgroundUV.y = (backgroundUV.y - 0.5) * max(1.0, 1.0/u_aspect) + 0.5;
+    
+    // Apply distortion
+    backgroundUV.x += o;
+    
+    vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
+    backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
+}
     
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
     vec2 blob1Corrected = vec2(u_blob1_pos.x * u_aspect, u_blob1_pos.y);
