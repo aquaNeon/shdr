@@ -255,37 +255,16 @@ fragmentShader: `
 #ifdef GL_ES
 precision lowp float;
 #endif
+uniform vec2 u_resolution; uniform float u_time; uniform float u_aspect; uniform vec2 u_blob1_pos; uniform vec2 u_blob2_pos; uniform vec2 u_blob3_pos; 
+uniform sampler2D u_column_lookup; uniform float u_noise; uniform float u_distortion; 
+uniform vec3 u_color_one; uniform float u_size_one; uniform vec3 u_color_two; uniform float u_size_two; 
+uniform bool u_use_blob_one; uniform bool u_use_blob_two; uniform bool u_use_three_color; 
+uniform vec3 u_color_one; uniform float u_size_one; uniform vec3 u_color_two; uniform float u_size_two; uniform vec3 u_color_three; uniform float u_size_three;uniform sampler2D u_background_texture; uniform bool u_has_background;
+varying vec2 vUv; 
 
-uniform vec2 u_resolution;
-uniform float u_time;
-uniform float u_aspect;
-uniform vec2 u_blob1_pos;
-uniform vec2 u_blob2_pos;
-uniform vec2 u_blob3_pos;
-uniform sampler2D u_column_lookup;
-uniform float u_noise;
-uniform float u_distortion;
-uniform bool u_use_blob_one;
-uniform bool u_use_blob_two;
-uniform bool u_use_three_color;
-uniform vec3 u_color_one;
-uniform float u_size_one;
-uniform vec3 u_color_two;
-uniform float u_size_two;
-uniform vec3 u_color_three;
-uniform float u_size_three;
-uniform sampler2D u_background_texture;
-uniform bool u_has_background;
-varying vec2 vUv;
+float random(vec2 st) { return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5); } 
 
-float random(vec2 st) { 
-    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5); 
-} 
-
-vec2 random2(vec2 st) { 
-    st = vec2(dot(st,vec2(127.1,311.7)), dot(st,vec2(269.5,183.3))); 
-    return -1.0 + 2.0*fract(sin(st)*43758.5453123); 
-}
+vec2 random2(vec2 st) { st = vec2(dot(st,vec2(127.1,311.7)), dot(st,vec2(269.5,183.3))); return -1.0 + 2.0*fract(sin(st)*43758.5453123); }
 
 float noise(vec2 st) {
     vec2 i = floor(st);
@@ -334,40 +313,46 @@ void main() {
     float o = (fract(s) - 0.5) * u_distortion; 
     vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
     
+
     // Background sampling with very light column distortion
-    vec3 backgroundColor = vec3(0.0);
-    if (u_has_background) {
-        vec2 backgroundUV = vUv;
-        
-        // Use much lighter column distortion
-        backgroundUV.x += o * 0.1; // Only 10% of the column distortion strength
-        
-        vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
-        backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
-    }
+vec3 backgroundColor = vec3(0.0);
+if (u_has_background) {
+    vec2 backgroundUV = vUv;
+    
+    // Use much lighter column distortion
+    backgroundUV.x += o * 0.1; // Only 10% of the column distortion strength
+    
+    vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
+    backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
+}
+
 
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
     vec2 blob1Corrected = vec2(u_blob1_pos.x * u_aspect, u_blob1_pos.y);
     vec2 blob2Corrected = vec2(u_blob2_pos.x * u_aspect, u_blob2_pos.y);
     vec2 blob3Corrected = vec2(u_blob3_pos.x * u_aspect, u_blob3_pos.y);
     
-    // Scale blob sizes for mobile - make them bigger and more visible
-    float mobileScale = u_aspect < 1.0 ? 1.5 : 1.0; // 50% bigger on mobile
+ // Scale blob sizes for mobile - make them bigger and more visible
+float mobileScale = u_aspect < 1.0 ? 1.5 : 1.0; // 50% bigger on mobile
 
-    float intensity1 = 0.0;
-    if(u_use_blob_one) {
-        intensity1 = noiseBlob(aspectCorrected, blob1Corrected, u_size_one * mobileScale, u_time);
-    }
+float s1 = 0.0;
+if(u_use_blob_one) {
+    s1 = noiseBlob(aspectCorrected, blob1Corrected, u_size_one * mobileScale, u_time);
+}
 
-    float intensity2 = 0.0;
-    if(u_use_blob_two) {
-        intensity2 = noiseBlob(aspectCorrected, blob2Corrected, u_size_two * mobileScale, u_time + 100.0);
-    }
+float s2 = 0.0;
+if(u_use_blob_two) {
+    s2 = noiseBlob(aspectCorrected, blob2Corrected, u_size_two * mobileScale, u_time + 100.0);
+}
 
-    float intensity3 = 0.0;
-    if(u_use_three_color) {
-        intensity3 = noiseBlob(aspectCorrected, blob3Corrected, u_size_three * mobileScale, u_time + 200.0);
-    }
+float s3 = 0.0;
+if(u_use_three_color) {
+    s3 = noiseBlob(aspectCorrected, blob3Corrected, u_size_three * mobileScale, u_time + 200.0);
+}
+    
+float intensity1 = u_use_blob_one ? s1 : 0.0;
+float intensity2 = u_use_blob_two ? s2 : 0.0; 
+float intensity3 = u_use_three_color ? s3 : 0.0;
     
     float maxIntensity = max(max(intensity1, intensity2), intensity3);
     
