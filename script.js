@@ -438,8 +438,8 @@ void main() {
                                 if (time - animState.lastRenderTime < 33) return;
                                 
                                 // Add fade-in logic
-                                if (animState.fadeProgress < 1.0 && animState.isVisible) {
-                                    animState.fadeProgress = Math.min(1.0, animState.fadeProgress + 0.05);
+                                if (animState.fadeProgress < 1.0) {
+                                    animState.fadeProgress = Math.min(1.0, animState.fadeProgress + 0.1); // Faster fade
                                     state.renderer.domElement.style.opacity = animState.fadeProgress;
                                 }
                                 
@@ -511,9 +511,11 @@ void main() {
                             setVisible: (visible) => { 
                                 if (visible && !animState.isVisible) { 
                                     activeInstances.add(instanceController);
-                                    // Start fade-in
-                                    animState.fadeProgress = 0.0;
-                                    state.renderer.domElement.style.opacity = '0';
+                                    // Start fade-in immediately when becoming visible
+                                    if (animState.fadeProgress === 0.0) {
+                                        state.renderer.domElement.style.opacity = '0';
+                                    }
+                                    animState.fadeProgress = 0.0; // Reset fade progress
                                 } else if (!visible && animState.isVisible) { 
                                     activeInstances.delete(instanceController); 
                                 } 
