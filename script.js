@@ -312,18 +312,11 @@ void main() {
     vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
     
 
-    // Background sampling with simple cover and distortion
+// Background sampling with distortion (simple approach)
 vec3 backgroundColor = vec3(0.0);
 if (u_has_background) {
     vec2 backgroundUV = vUv;
-    
-    // Simple cover behavior - always crop to fit container aspect
-    backgroundUV.x = (backgroundUV.x - 0.5) * max(1.0, u_aspect) + 0.5;
-    backgroundUV.y = (backgroundUV.y - 0.5) * max(1.0, 1.0/u_aspect) + 0.5;
-    
-    // Apply distortion
     backgroundUV.x += o;
-    
     vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
     backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
 }
