@@ -597,7 +597,7 @@ void main() {
                 container.shaderController.setVisible(entry.isIntersecting); 
             } 
         }); 
-    }, { rootMargin: "600px" });
+    }, { rootMargin: "300px" });
     
     containers.forEach(container => masterObserver.observe(container));
 }
