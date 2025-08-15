@@ -174,7 +174,7 @@ function initializeOptimizedShaders() {
                     case 0:
                         instanceCount++; 
                         state.isLowQuality = perfConfig.isMobile || instanceCount > 2;
-                        const p = container.getAttribute('data-width-preset') || 'balanced'; 
+                        const p = container.getAttribute('data-width-preset') || 'minimal'; 
                         const ps = { 'balanced': { c: 5, v: 1.0, d: 0.2 }, 'extremes': { c: 4, v: 1.8, d: 0.15 }, 'minimal': { c: 3, v: 1.5, d: 0.1 }, 'dense': { c: 7, v: 0.8, d: 0.25 } }; 
                         const c = ps[p] || ps['balanced'];
                         state.settings = { 
@@ -187,7 +187,8 @@ function initializeOptimizedShaders() {
                             sensitivityThree: parseFloat(container.getAttribute('data-sensitivity-three')) || 0.1,
                             // Force disable hover if reduced motion is enabled
                             hoverEnabled: prefersReducedMotion ? false : (container.getAttribute('data-hover') !== 'false'),
-                            backgroundImage: container.getAttribute('data-background-image') || null
+                            backgroundImage: container.getAttribute('data-background-image') || null,
+                            backgroundColor: container.getAttribute('data-bg-color') || null
                         };
                         const boundaries = generateColumnBoundaries(state.settings.columns, state.settings.widthVariation, parseInt(container.getAttribute('data-seed')) || 1234);
                         state.lookupTexture = generateLookupTexture(boundaries); 
@@ -245,10 +246,17 @@ function initializeOptimizedShaders() {
                             u_use_three_color: { value: container.getAttribute('data-use-three-color') === 'true' }, 
                             u_color_three: { value: new THREE.Color(container.getAttribute('data-color-three') || '#ffff5b') }, 
                             u_size_three: { value: parseFloat(container.getAttribute('data-size-three')) || 0.65 },
-                            // Use the pre-blurred texture!
+                            // NEW: Shape type uniforms
+                            u_shape_type_one: { value: parseInt(container.getAttribute('data-shape-type-one')) || 0 },
+                            u_shape_type_two: { value: parseInt(container.getAttribute('data-shape-type-two')) || 0 },
+                            u_shape_type_three: { value: parseInt(container.getAttribute('data-shape-type-three')) || 0 },
+                            // Background options
                             u_background_texture: { value: state.blurredBackgroundTexture },
-                            u_has_background: { value: state.blurredBackgroundTexture !== null }
+                            u_has_background: { value: state.blurredBackgroundTexture !== null },
+                            u_background_color: { value: state.settings.backgroundColor ? new THREE.Color(state.settings.backgroundColor) : new THREE.Color(0, 0, 0) },
+                            u_has_bg_color: { value: state.settings.backgroundColor !== null && state.settings.backgroundColor !== '' }
                         };
+                        
                         state.material = new THREE.ShaderMaterial({ 
                             uniforms: state.uniforms, 
                             transparent: true,
@@ -277,8 +285,13 @@ uniform vec3 u_color_two;
 uniform float u_size_two;
 uniform vec3 u_color_three;
 uniform float u_size_three;
+uniform int u_shape_type_one;
+uniform int u_shape_type_two;
+uniform int u_shape_type_three;
 uniform sampler2D u_background_texture;
 uniform bool u_has_background;
+uniform vec3 u_background_color;
+uniform bool u_has_bg_color;
 varying vec2 vUv;
 
 float random(vec2 st) { 
@@ -312,6 +325,7 @@ float fbm(vec2 st, int octaves) {
     return value;
 }
 
+// Original organic blob shape (reverted to original)
 float noiseBlob(vec2 pos, vec2 center, float size, float time) {
     vec2 offset = pos - center;
     float dist = length(offset);
@@ -330,6 +344,148 @@ float noiseBlob(vec2 pos, vec2 center, float size, float time) {
     return intensity * intensity;
 }
 
+// Rectangle shape with more gradient and softness
+float rectangleShape(vec2 pos, vec2 center, float size, float time) {
+    vec2 offset = pos - center;
+    
+    // Add rotation to rectangle
+    float rotation = time * 0.2; // Slow rotation
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    vec2 rotatedOffset = vec2(
+        offset.x * cosR - offset.y * sinR,
+        offset.x * sinR + offset.y * cosR
+    );
+    
+    // Add subtle animation to rectangle size
+    float animScale = 1.0 + sin(time * 0.5) * 0.05;
+    vec2 rectSize = vec2(size * animScale * 0.7, size * animScale * 0.5);
+    
+    vec2 absOffset = abs(rotatedOffset);
+    
+    // Distance from rectangle edges
+    vec2 edgeDistance = max(absOffset - rectSize, 0.0);
+    float dist = length(edgeDistance) + max(max(absOffset.x - rectSize.x, absOffset.y - rectSize.y), 0.0);
+    
+    // Much softer gradient falloff - longer and more gradual
+    float gradientWidth = size * 0.6; // Increased from 0.3
+    float coreSize = size * 0.3; // Smaller solid core
+    
+    float intensity;
+    if (dist < coreSize) {
+        intensity = 1.0; // Solid core
+    } else {
+        intensity = 1.0 - smoothstep(coreSize, coreSize + gradientWidth, dist);
+    }
+    
+    return max(0.0, intensity);
+}
+
+// Star shape - back to the good version with slightly rounded corners
+float starShape(vec2 pos, vec2 center, float size, float time) {
+    vec2 offset = pos - center;
+    
+    // Apply rotation
+    float rotation = time * 0.15;
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    vec2 q = vec2(
+        offset.x * cosR - offset.y * sinR,
+        offset.x * sinR + offset.y * cosR
+    );
+    
+    // Star parameters - back to working version
+    const float segments = 5.0;
+    const float indent = 0.05; // Back to the good indent value
+    const float pi = 3.141592654;
+    
+    float angle = (atan(q.y, q.x) + pi) / (2.0 * pi); // 0-1
+    float segment = angle * segments;
+    
+    float segmentI = floor(segment);
+    float segmentF = fract(segment);
+    
+    angle = (segmentI + 0.5) / segments;
+    
+    // Create star indentations
+    if (segmentF > 0.5) {
+        angle -= indent;
+    } else {
+        angle += indent;
+    }
+    
+    angle *= 2.0 * pi;
+    
+    // Calculate outline point
+    vec2 outline = vec2(cos(angle), sin(angle));
+    
+    // Distance from star edge - scale properly to match size parameter
+    float distance = abs(dot(outline, q)) / size;
+    
+    // Add rounded corners by softening the distance slightly
+    float cornerRadius = 0.08; // Small rounding amount
+    distance = distance - cornerRadius * (1.0 - distance); // Soften closer to edges
+    
+    // Same gradient style as rectangle and triangle
+    float gradientWidth = 0.6;
+    float coreSize = 0.3;
+    
+    float intensity;
+    if (distance < coreSize) {
+        intensity = 1.0; // Solid core
+    } else {
+        intensity = 1.0 - smoothstep(coreSize, coreSize + gradientWidth, distance);
+    }
+    
+    return max(0.0, intensity);
+}
+
+// Triangle shape with gradient falloff
+float triangleShape(vec2 pos, vec2 center, float size, float time) {
+    vec2 offset = pos - center;
+    
+    // Rotate triangle slightly over time
+    float rotation = time * 0.3;
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    vec2 rotatedOffset = vec2(
+        offset.x * cosR - offset.y * sinR,
+        offset.x * sinR + offset.y * cosR
+    );
+    
+    // Equilateral triangle using signed distance field
+    float triangleSize = size;
+    vec2 p = rotatedOffset / triangleSize;
+    
+    const float k = sqrt(3.0);
+    p.x = abs(p.x) - 1.0;
+    p.y = p.y + 1.0/k;
+    if (p.x + k*p.y > 0.0) p = vec2(p.x - k*p.y, -k*p.x - p.y) / 2.0;
+    p.x -= clamp(p.x, -2.0, 0.0);
+    
+    float triangleDist = -length(p) * sign(p.y) * triangleSize;
+    
+    // Gradient falloff - saturated core with shorter gradient
+    float gradientWidth = size * 0.35;
+    float intensity = 1.0 - smoothstep(-gradientWidth * 0.2, gradientWidth, triangleDist);
+    
+    return max(0.0, intensity * intensity);
+}
+
+// Universal shape function that routes to the correct shape
+float getShapeIntensity(vec2 pos, vec2 center, float size, float time, int shapeType) {
+    if (shapeType == 1) {
+        return rectangleShape(pos, center, size, time);
+    } else if (shapeType == 2) {
+        return starShape(pos, center, size, time);
+    } else if (shapeType == 3) {
+        return triangleShape(pos, center, size, time);
+    } else {
+        // Default: organic blob (shapeType == 0)
+        return noiseBlob(pos, center, size, time);
+    }
+}
+
 void main() { 
     vec4 d = texture2D(u_column_lookup, vec2(vUv.x, 0.0)); 
     float i = d.r * 255.0; 
@@ -339,14 +495,17 @@ void main() {
     
     // Background sampling with very light column distortion
     vec3 backgroundColor = vec3(0.0);
+    bool hasAnyBackground = u_has_background || u_has_bg_color;
+    
     if (u_has_background) {
+        // Image background
         vec2 backgroundUV = vUv;
-        
-        // Use much lighter column distortion
         backgroundUV.x += o * 0.1; // Only 10% of the column distortion strength
-        
         vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
         backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
+    } else if (u_has_bg_color) {
+        // Solid color background
+        backgroundColor = u_background_color;
     }
 
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
@@ -359,23 +518,23 @@ void main() {
 
     float intensity1 = 0.0;
     if(u_use_blob_one) {
-        intensity1 = noiseBlob(aspectCorrected, blob1Corrected, u_size_one * mobileScale, u_time);
+        intensity1 = getShapeIntensity(aspectCorrected, blob1Corrected, u_size_one * mobileScale, u_time, u_shape_type_one);
     }
 
     float intensity2 = 0.0;
     if(u_use_blob_two) {
-        intensity2 = noiseBlob(aspectCorrected, blob2Corrected, u_size_two * mobileScale, u_time + 100.0);
+        intensity2 = getShapeIntensity(aspectCorrected, blob2Corrected, u_size_two * mobileScale, u_time + 100.0, u_shape_type_two);
     }
 
     float intensity3 = 0.0;
     if(u_use_three_color) {
-        intensity3 = noiseBlob(aspectCorrected, blob3Corrected, u_size_three * mobileScale, u_time + 200.0);
+        intensity3 = getShapeIntensity(aspectCorrected, blob3Corrected, u_size_three * mobileScale, u_time + 200.0, u_shape_type_three);
     }
     
     float maxIntensity = max(max(intensity1, intensity2), intensity3);
     
     if (maxIntensity <= 0.0) {
-        if (u_has_background) {
+        if (hasAnyBackground) {
             vec3 c = backgroundColor; 
             float g = (random(vUv * 0.5) - 0.5) * u_noise * 0.08; 
             c += g;
@@ -394,7 +553,7 @@ void main() {
     }
     
     vec3 finalColor;
-    if (u_has_background) {
+    if (hasAnyBackground) {
         finalColor = mix(backgroundColor, blendedColor, maxIntensity);
     } else {
         finalColor = blendedColor;
@@ -404,7 +563,7 @@ void main() {
     float g = (random(vUv * 0.5) - 0.5) * u_noise * 0.12; 
     c += g; 
     
-    float alpha = u_has_background ? 1.0 : maxIntensity;
+    float alpha = hasAnyBackground ? 1.0 : maxIntensity;
     gl_FragColor = vec4(c, alpha);
 }`
                         });
