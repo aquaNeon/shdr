@@ -1,4 +1,3 @@
-//  Blur happens ONCE during init - no performance impact during runtime
 window.addEventListener('load', () => {
     const performanceDelay = navigator.hardwareConcurrency < 4 ? 800 : 500;
     setTimeout(initializeOptimizedShaders, performanceDelay);
@@ -6,6 +5,9 @@ window.addEventListener('load', () => {
 
 function initializeOptimizedShaders() {
     if (typeof THREE === 'undefined') { console.error("Shader Error: Three.js missing."); return; }
+    
+    // Check for reduced motion preference
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     
     const perfConfig = { 
         maxInstances: 8,
@@ -183,7 +185,8 @@ function initializeOptimizedShaders() {
                             sensitivityOne: parseFloat(container.getAttribute('data-sensitivity-one')) || 0.08,
                             sensitivityTwo: parseFloat(container.getAttribute('data-sensitivity-two')) || 0.05, 
                             sensitivityThree: parseFloat(container.getAttribute('data-sensitivity-three')) || 0.1,
-                            hoverEnabled: container.getAttribute('data-hover') !== 'false',
+                            // Force disable hover if reduced motion is enabled
+                            hoverEnabled: prefersReducedMotion ? false : (container.getAttribute('data-hover') !== 'false'),
                             backgroundImage: container.getAttribute('data-background-image') || null
                         };
                         const boundaries = generateColumnBoundaries(state.settings.columns, state.settings.widthVariation, parseInt(container.getAttribute('data-seed')) || 1234);
@@ -415,8 +418,9 @@ void main() {
                             isVisible: false, 
                             lastRenderTime: 0, 
                             isHovering: false,
-                            timeOffset: Math.random() * Math.PI * 2
-                        }; 
+                            timeOffset: Math.random() * Math.PI * 2,
+                            fadeProgress: 0.0
+                        };
                         const blobs = { b1: new THREE.Vector2(0.3, 0.7), b2: new THREE.Vector2(0.6, 0.1), b3: new THREE.Vector2(0.9, 0.5) }; 
                         const mousePos = new THREE.Vector2(0.5, 0.5);
                         const defaultTargets = { 
@@ -431,24 +435,40 @@ void main() {
                             b3: new THREE.Vector2(0.9, 0.5)
                         };
                         
-                        const instanceController = { 
+                      const instanceController = { 
                             update: (time) => { 
                                 if (renderBudgetExceeded) return;
                                 if (time - animState.lastRenderTime < 33) return;
+                                
+                                // Add fade-in logic
+                                if (animState.fadeProgress < 1.0 && animState.isVisible) {
+                                    animState.fadeProgress = Math.min(1.0, animState.fadeProgress + 0.05);
+                                    state.renderer.domElement.style.opacity = animState.fadeProgress;
+                                }
+                                
                                 const timeInSeconds = (time + animState.timeOffset) * 0.0008;
                                 
-                                const slowTime = timeInSeconds * 0.4;
-                                const mediumTime = timeInSeconds * 0.6;
-                                const fastTime = timeInSeconds * 0.8;
-                                
-                                defaultTargets.b1.x = 0.3 + Math.sin(slowTime * 0.7) * 0.15 + Math.cos(fastTime * 0.3) * 0.08;
-                                defaultTargets.b1.y = 0.7 + Math.cos(slowTime * 0.9) * 0.12 + Math.sin(mediumTime * 0.5) * 0.06;
-                                
-                                defaultTargets.b2.x = 0.6 + Math.cos(mediumTime * 0.8) * 0.18 + Math.sin(slowTime * 0.4) * 0.07;
-                                defaultTargets.b2.y = 0.1 + Math.sin(mediumTime * 0.6) * 0.14 + Math.cos(fastTime * 0.7) * 0.05;
-                                
-                                defaultTargets.b3.x = 0.9 + Math.sin(fastTime * 0.5) * 0.16 + Math.cos(slowTime * 0.8) * 0.09;
-                                defaultTargets.b3.y = 0.5 + Math.cos(fastTime * 0.4) * 0.13 + Math.sin(slowTime * 0.6) * 0.07;
+                                // If reduced motion is enabled, keep blobs at their original positions
+                                if (prefersReducedMotion) {
+                                    // Keep blobs static at their original positions
+                                    defaultTargets.b1.set(0.3, 0.7);
+                                    defaultTargets.b2.set(0.6, 0.1);
+                                    defaultTargets.b3.set(0.9, 0.5);
+                                } else {
+                                    // Normal animation behavior
+                                    const slowTime = timeInSeconds * 0.4;
+                                    const mediumTime = timeInSeconds * 0.6;
+                                    const fastTime = timeInSeconds * 0.8;
+                                    
+                                    defaultTargets.b1.x = 0.3 + Math.sin(slowTime * 0.7) * 0.15 + Math.cos(fastTime * 0.3) * 0.08;
+                                    defaultTargets.b1.y = 0.7 + Math.cos(slowTime * 0.9) * 0.12 + Math.sin(mediumTime * 0.5) * 0.06;
+                                    
+                                    defaultTargets.b2.x = 0.6 + Math.cos(mediumTime * 0.8) * 0.18 + Math.sin(slowTime * 0.4) * 0.07;
+                                    defaultTargets.b2.y = 0.1 + Math.sin(mediumTime * 0.6) * 0.14 + Math.cos(fastTime * 0.7) * 0.05;
+                                    
+                                    defaultTargets.b3.x = 0.9 + Math.sin(fastTime * 0.5) * 0.16 + Math.cos(slowTime * 0.8) * 0.09;
+                                    defaultTargets.b3.y = 0.5 + Math.cos(fastTime * 0.4) * 0.13 + Math.sin(slowTime * 0.6) * 0.07;
+                                }
                                 
                                 if (state.settings.hoverEnabled && animState.isHovering) {
                                     const offsetX = (mousePos.x - 0.5) * 2;
@@ -502,12 +522,15 @@ void main() {
                             }, 
                             setVisible: (visible) => { 
                                 if (visible && !animState.isVisible) { 
-                                    activeInstances.add(instanceController); 
+                                    activeInstances.add(instanceController);
+                                    // Start fade-in
+                                    animState.fadeProgress = 0.0;
+                                    state.renderer.domElement.style.opacity = '0';
                                 } else if (!visible && animState.isVisible) { 
                                     activeInstances.delete(instanceController); 
                                 } 
                                 animState.isVisible = visible; 
-                            } 
+                            }
                         };
                         
                         const onMouseMove = e => { 
@@ -597,7 +620,7 @@ void main() {
                 container.shaderController.setVisible(entry.isIntersecting); 
             } 
         }); 
-    }, { rootMargin: "300px" });
+    }, { rootMargin: "200px" });
     
     containers.forEach(container => masterObserver.observe(container));
 }
