@@ -312,15 +312,19 @@ void main() {
     vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
     
 
-// Background sampling with distortion (simple approach)
+    // Background sampling with very light column distortion
 vec3 backgroundColor = vec3(0.0);
 if (u_has_background) {
     vec2 backgroundUV = vUv;
-    backgroundUV.x += o;
+    
+    // Use much lighter column distortion
+    backgroundUV.x += o * 0.1; // Only 10% of the column distortion strength
+    
     vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
     backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
 }
-    
+
+
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
     vec2 blob1Corrected = vec2(u_blob1_pos.x * u_aspect, u_blob1_pos.y);
     vec2 blob2Corrected = vec2(u_blob2_pos.x * u_aspect, u_blob2_pos.y);
