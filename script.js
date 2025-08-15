@@ -432,24 +432,18 @@ void main() {
                             b3: new THREE.Vector2(0.9, 0.5)
                         };
                         
-                        const instanceController = { 
+                      const instanceController = { 
                             update: (time) => { 
                                 if (renderBudgetExceeded) return;
                                 if (time - animState.lastRenderTime < 33) return;
+                                
+                                // Add fade-in logic
+                                if (animState.fadeProgress < 1.0 && animState.isVisible) {
+                                    animState.fadeProgress = Math.min(1.0, animState.fadeProgress + 0.05);
+                                    state.renderer.domElement.style.opacity = animState.fadeProgress;
+                                }
+                                
                                 const timeInSeconds = (time + animState.timeOffset) * 0.0008;
-
-                                const instanceController = { 
-                                    update: (time) => { 
-                                        if (renderBudgetExceeded) return;
-                                        if (time - animState.lastRenderTime < 33) return;
-                                        
-                                        // Add fade-in logic
-                                        if (animState.fadeProgress < 1.0 && animState.isVisible) {
-                                            animState.fadeProgress = Math.min(1.0, animState.fadeProgress + 0.05);
-                                            state.renderer.domElement.style.opacity = animState.fadeProgress;
-                                        }
-                                        
-                                        const timeInSeconds = (time + animState.timeOffset) * 0.0008;
                                 
                                 const slowTime = timeInSeconds * 0.4;
                                 const mediumTime = timeInSeconds * 0.6;
