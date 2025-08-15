@@ -415,9 +415,8 @@ void main() {
                             isVisible: false, 
                             lastRenderTime: 0, 
                             isHovering: false,
-                            timeOffset: Math.random() * Math.PI * 2,
-                            fadeProgress: 0.0
-                        };
+                            timeOffset: Math.random() * Math.PI * 2
+                        }; 
                         const blobs = { b1: new THREE.Vector2(0.3, 0.7), b2: new THREE.Vector2(0.6, 0.1), b3: new THREE.Vector2(0.9, 0.5) }; 
                         const mousePos = new THREE.Vector2(0.5, 0.5);
                         const defaultTargets = { 
@@ -432,17 +431,10 @@ void main() {
                             b3: new THREE.Vector2(0.9, 0.5)
                         };
                         
-                      const instanceController = { 
+                        const instanceController = { 
                             update: (time) => { 
                                 if (renderBudgetExceeded) return;
                                 if (time - animState.lastRenderTime < 33) return;
-                                
-                                // Add fade-in logic
-                                if (animState.fadeProgress < 1.0) {
-                                    animState.fadeProgress = Math.min(1.0, animState.fadeProgress + 0.1); // Faster fade
-                                    state.renderer.domElement.style.opacity = animState.fadeProgress;
-                                }
-                                
                                 const timeInSeconds = (time + animState.timeOffset) * 0.0008;
                                 
                                 const slowTime = timeInSeconds * 0.4;
@@ -510,17 +502,12 @@ void main() {
                             }, 
                             setVisible: (visible) => { 
                                 if (visible && !animState.isVisible) { 
-                                    activeInstances.add(instanceController);
-                                    // Start fade-in immediately when becoming visible
-                                    if (animState.fadeProgress === 0.0) {
-                                        state.renderer.domElement.style.opacity = '0';
-                                    }
-                                    animState.fadeProgress = 0.0; // Reset fade progress
+                                    activeInstances.add(instanceController); 
                                 } else if (!visible && animState.isVisible) { 
                                     activeInstances.delete(instanceController); 
                                 } 
                                 animState.isVisible = visible; 
-                            }
+                            } 
                         };
                         
                         const onMouseMove = e => { 
