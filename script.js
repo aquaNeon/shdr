@@ -237,6 +237,8 @@ function initializeOptimizedShaders() {
                             u_size_one: { value: parseFloat(container.getAttribute('data-size-one')) || 0.7 }, 
                             u_color_two: { value: new THREE.Color(container.getAttribute('data-color-two') || '#c1ff5b') }, 
                             u_size_two: { value: parseFloat(container.getAttribute('data-size-two')) || 0.6 }, 
+                            u_use_blob_one: { value: container.getAttribute('data-use-blob-one') !== 'false' }, 
+                            u_use_blob_two: { value: container.getAttribute('data-use-blob-two') !== 'false' }, 
                             u_use_three_color: { value: container.getAttribute('data-use-three-color') === 'true' }, 
                             u_color_three: { value: new THREE.Color(container.getAttribute('data-color-three') || '#ffff5b') }, 
                             u_size_three: { value: parseFloat(container.getAttribute('data-size-three')) || 0.65 },
@@ -256,8 +258,8 @@ precision lowp float;
 uniform vec2 u_resolution; uniform float u_time; uniform float u_aspect; uniform vec2 u_blob1_pos; uniform vec2 u_blob2_pos; uniform vec2 u_blob3_pos; 
 uniform sampler2D u_column_lookup; uniform float u_noise; uniform float u_distortion; 
 uniform vec3 u_color_one; uniform float u_size_one; uniform vec3 u_color_two; uniform float u_size_two; 
-uniform bool u_use_three_color; uniform vec3 u_color_three; uniform float u_size_three; 
-uniform sampler2D u_background_texture; uniform bool u_has_background;
+uniform bool u_use_blob_one; uniform bool u_use_blob_two; uniform bool u_use_three_color; 
+uniform vec3 u_color_one; uniform float u_size_one; uniform vec3 u_color_two; uniform float u_size_two; uniform vec3 u_color_three; uniform float u_size_three;uniform sampler2D u_background_texture; uniform bool u_has_background;
 varying vec2 vUv; 
 
 float random(vec2 st) { return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5); } 
@@ -330,16 +332,27 @@ if (u_has_background) {
     vec2 blob2Corrected = vec2(u_blob2_pos.x * u_aspect, u_blob2_pos.y);
     vec2 blob3Corrected = vec2(u_blob3_pos.x * u_aspect, u_blob3_pos.y);
     
-    float s1 = noiseBlob(aspectCorrected, blob1Corrected, u_size_one, u_time);
-    float s2 = noiseBlob(aspectCorrected, blob2Corrected, u_size_two, u_time + 100.0);
-    float s3 = 0.0;
-    if(u_use_three_color) {
-        s3 = noiseBlob(aspectCorrected, blob3Corrected, u_size_three, u_time + 200.0);
-    }
+ // Scale blob sizes for mobile - make them bigger and more visible
+float mobileScale = u_aspect < 1.0 ? 1.5 : 1.0; // 50% bigger on mobile
+
+float s1 = 0.0;
+if(u_use_blob_one) {
+    s1 = noiseBlob(aspectCorrected, blob1Corrected, u_size_one * mobileScale, u_time);
+}
+
+float s2 = 0.0;
+if(u_use_blob_two) {
+    s2 = noiseBlob(aspectCorrected, blob2Corrected, u_size_two * mobileScale, u_time + 100.0);
+}
+
+float s3 = 0.0;
+if(u_use_three_color) {
+    s3 = noiseBlob(aspectCorrected, blob3Corrected, u_size_three * mobileScale, u_time + 200.0);
+}
     
-    float intensity1 = s1;
-    float intensity2 = s2; 
-    float intensity3 = u_use_three_color ? s3 : 0.0;
+float intensity1 = u_use_blob_one ? s1 : 0.0;
+float intensity2 = u_use_blob_two ? s2 : 0.0; 
+float intensity3 = u_use_three_color ? s3 : 0.0;
     
     float maxIntensity = max(max(intensity1, intensity2), intensity3);
     
