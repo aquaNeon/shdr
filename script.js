@@ -311,13 +311,27 @@ void main() {
     float o = (fract(s) - 0.5) * u_distortion; 
     vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
     
-    // Background is pre-blurred simple texture lookup! (1 sample vs 225)
+    // Background sampling with proper aspect ratio handling
     vec3 backgroundColor = vec3(0.0);
     if (u_has_background) {
-        vec2 clampedDistortedUV = clamp(distortedUV, vec2(0.0), vec2(1.0));
-        backgroundColor = texture2D(u_background_texture, clampedDistortedUV).rgb * 0.85;    
-}
-
+        // Use original vUv for background to maintain proper proportions
+        vec2 backgroundUV = vUv;
+        
+        // Apply aspect ratio correction to center the image properly
+        if (u_aspect > 1.0) {
+            // Wide aspect ratio - scale Y to fit
+            backgroundUV.y = (backgroundUV.y - 0.5) / u_aspect + 0.5;
+        } else {
+            // Tall aspect ratio - scale X to fit  
+            backgroundUV.x = (backgroundUV.x - 0.5) * u_aspect + 0.5;
+        }
+        
+        // Apply the distortion AFTER aspect correction
+        backgroundUV.x += o;
+        
+        vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
+        backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
+    }
 
     
     vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
