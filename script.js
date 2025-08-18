@@ -4,7 +4,7 @@ window.addEventListener('load', () => {
 });
 
 function initializeOptimizedShaders() {
-    if (typeof THREE === 'undefined') { console.error("Shader Error: Three.js missing."); return; }
+    if (typeof THREE === 'undpefined') { console.error("Shader Error: Three.js missing."); return; }
     
     // Check for reduced motion preference
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -225,9 +225,9 @@ function initializeOptimizedShaders() {
                             u_time: { value: 0.0 }, 
                             u_resolution: { value: new THREE.Vector2(container.clientWidth, container.clientHeight) }, 
                             u_aspect: { value: container.clientWidth / container.clientHeight },
-                            u_blob1_pos: { value: new THREE.Vector2(0.3, 0.7) }, 
-                            u_blob2_pos: { value: new THREE.Vector2(0.6, 0.1) }, 
-                            u_blob3_pos: { value: new THREE.Vector2(0.9, 0.5) }, 
+                            u_blob1_pos: { value: new THREE.Vector2(0.15, 0.7) },  
+                            u_blob2_pos: { value: new THREE.Vector2(0.5, 0.2) }, 
+                            u_blob3_pos: { value: new THREE.Vector2(0.85, 0.6) },
                             u_column_lookup: { value: state.lookupTexture }, 
                             u_noise: { value: state.settings.noise }, 
                             u_distortion: { value: state.settings.distortion }, 
@@ -254,301 +254,314 @@ function initializeOptimizedShaders() {
                             transparent: true,
                             precision: "lowp",
                             vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`, 
-                            fragmentShader: `
-                            #ifdef GL_ES
-                            precision lowp float;
-                            #endif
+fragmentShader: `
+#ifdef GL_ES
+precision lowp float;
+#endif
 
-                            uniform vec2 u_resolution;
-                            uniform float u_time;
-                            uniform float u_aspect;
-                            uniform vec2 u_blob1_pos;
-                            uniform vec2 u_blob2_pos;
-                            uniform vec2 u_blob3_pos;
-                            uniform sampler2D u_column_lookup;
-                            uniform float u_noise;
-                            uniform float u_distortion;
-                            uniform bool u_use_blob_one;
-                            uniform bool u_use_blob_two;
-                            uniform bool u_use_three_color;
-                            uniform vec3 u_color_one;
-                            uniform float u_size_one;
-                            uniform vec3 u_color_two;
-                            uniform float u_size_two;
-                            uniform vec3 u_color_three;
-                            uniform float u_size_three;
-                            uniform int u_shape_type_one;
-                            uniform int u_shape_type_two;
-                            uniform int u_shape_type_three;
-                            uniform sampler2D u_background_texture;
-                            uniform bool u_has_background;
-                            uniform vec3 u_background_color;
-                            uniform bool u_has_bg_color;
-                            varying vec2 vUv;
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform float u_aspect;
+uniform vec2 u_blob1_pos;
+uniform vec2 u_blob2_pos;
+uniform vec2 u_blob3_pos;
+uniform sampler2D u_column_lookup;
+uniform float u_noise;
+uniform float u_distortion;
+uniform bool u_use_blob_one;
+uniform bool u_use_blob_two;
+uniform bool u_use_three_color;
+uniform vec3 u_color_one;
+uniform float u_size_one;
+uniform vec3 u_color_two;
+uniform float u_size_two;
+uniform vec3 u_color_three;
+uniform float u_size_three;
+uniform int u_shape_type_one;
+uniform int u_shape_type_two;
+uniform int u_shape_type_three;
+uniform sampler2D u_background_texture;
+uniform bool u_has_background;
+uniform vec3 u_background_color;
+uniform bool u_has_bg_color;
+varying vec2 vUv;
 
-                            float random(vec2 st) { 
-                                return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5); 
-                            } 
+float random(vec2 st) { 
+    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5); 
+} 
 
-                            vec2 random2(vec2 st) { 
-                                st = vec2(dot(st,vec2(127.1,311.7)), dot(st,vec2(269.5,183.3))); 
-                                return -1.0 + 2.0*fract(sin(st)*43758.5453123); 
-                            }
+vec2 random2(vec2 st) { 
+    st = vec2(dot(st,vec2(127.1,311.7)), dot(st,vec2(269.5,183.3))); 
+    return -1.0 + 2.0*fract(sin(st)*43758.5453123); 
+}
 
-                            float noise(vec2 st) {
-                                vec2 i = floor(st);
-                                vec2 f = fract(st);
-                                vec2 u = f*f*(3.0-2.0*f);
-                                return mix(mix(dot(random2(i + vec2(0.0,0.0)), f - vec2(0.0,0.0)),
-                                            dot(random2(i + vec2(1.0,0.0)), f - vec2(1.0,0.0)), u.x),
-                                        mix(dot(random2(i + vec2(0.0,1.0)), f - vec2(0.0,1.0)),
-                                            dot(random2(i + vec2(1.0,1.0)), f - vec2(1.0,1.0)), u.x), u.y);
-                            }
+float noise(vec2 st) {
+    vec2 i = floor(st);
+    vec2 f = fract(st);
+    vec2 u = f*f*(3.0-2.0*f);
+    return mix(mix(dot(random2(i + vec2(0.0,0.0)), f - vec2(0.0,0.0)),
+                dot(random2(i + vec2(1.0,0.0)), f - vec2(1.0,0.0)), u.x),
+            mix(dot(random2(i + vec2(0.0,1.0)), f - vec2(0.0,1.0)),
+                dot(random2(i + vec2(1.0,1.0)), f - vec2(1.0,1.0)), u.x), u.y);
+}
 
-                            float fbm(vec2 st, int octaves) {
-                                float value = 0.0;
-                                float amplitude = 0.5;
-                                for (int i = 0; i < 4; i++) {
-                                    if (i >= octaves) break;
-                                    value += amplitude * noise(st);
-                                    st *= 2.0;
-                                    amplitude *= 0.5;
-                                }
-                                return value;
-                            }
+float noiseBlob(vec2 pos, vec2 center, float size, float time) {
+    vec2 offset = pos - center;
+    float dist = length(offset);
+    
+    float angle = atan(offset.y, offset.x);
+    float edgeNoise = sin(angle * 4.0 + time * 0.8) * 0.06 + 
+                    sin(angle * 7.0 - time * 0.6) * 0.03 +
+                    sin(angle * 11.0 + time * 0.4) * 0.015;
+    
+    float organicRadius = size * (1.0 + edgeNoise);
+    
+    float normalizedDist = dist / organicRadius;
+    if (normalizedDist >= 1.0) return 0.0;
+    
+    float intensity = 1.0 - (normalizedDist * normalizedDist);
+    return intensity * intensity;
+}
 
-                            float noiseBlob(vec2 pos, vec2 center, float size, float time) {
-                                vec2 offset = pos - center;
-                                float dist = length(offset);
-                                
-                                float angle = atan(offset.y, offset.x);
-                                float edgeNoise = sin(angle * 4.0 + time * 0.8) * 0.06 + 
-                                                sin(angle * 7.0 - time * 0.6) * 0.03 +
-                                                sin(angle * 11.0 + time * 0.4) * 0.015;
-                                
-                                float organicRadius = size * (1.0 + edgeNoise);
-                                
-                                float normalizedDist = dist / organicRadius;
-                                if (normalizedDist >= 1.0) return 0.0;
-                                
-                                float intensity = 1.0 - (normalizedDist * normalizedDist);
-                                return intensity * intensity;
-                            }
+float rectangleShape(vec2 pos, vec2 center, float size, float time) {
+    vec2 offset = pos - center;
+    
+    float rotation = time * -0.005; 
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    vec2 rotatedOffset = vec2(
+        offset.x * cosR - offset.y * sinR,
+        offset.x * sinR + offset.y * cosR
+    );
+    
+    float animScale = 1.0 + sin(time * 0.5) * 0.005;
+    vec2 rectSize = vec2(size * animScale * 0.7, size * animScale * 0.5);
+    
+    vec2 absOffset = abs(rotatedOffset);
+    vec2 edgeDistance = max(absOffset - rectSize, 0.0);
+    float dist = length(edgeDistance) + max(max(absOffset.x - rectSize.x, absOffset.y - rectSize.y), 0.0);
+    
+    float gradientWidth = size * 0.6;
+    float coreSize = size * 0.3;
+    
+    float intensity;
+    if (dist < coreSize) {
+        intensity = 1.0;
+    } else {
+        intensity = 1.0 - smoothstep(coreSize, coreSize + gradientWidth, dist);
+    }
+    
+    return max(0.0, intensity);
+}
 
-                            // Rectangle shape with more gradient and softness
-                            float rectangleShape(vec2 pos, vec2 center, float size, float time) {
-                                vec2 offset = pos - center;
-                                
-                                // Add rotation to rectangle
-                                float rotation = time * 0.2; // Slow rotation
-                                float cosR = cos(rotation);
-                                float sinR = sin(rotation);
-                                vec2 rotatedOffset = vec2(
-                                    offset.x * cosR - offset.y * sinR,
-                                    offset.x * sinR + offset.y * cosR
-                                );
-                                
-                                // Add subtle animation to rectangle size
-                                float animScale = 1.0 + sin(time * 0.5) * 0.05;
-                                vec2 rectSize = vec2(size * animScale * 0.7, size * animScale * 0.5);
-                                
-                                vec2 absOffset = abs(rotatedOffset);
-                                
-                                // Distance from rectangle edges
-                                vec2 edgeDistance = max(absOffset - rectSize, 0.0);
-                                float dist = length(edgeDistance) + max(max(absOffset.x - rectSize.x, absOffset.y - rectSize.y), 0.0);
-                                
-                                // Much softer gradient falloff - longer and more gradual
-                                float gradientWidth = size * 0.6;
-                                float coreSize = size * 0.3;
-                                
-                                float intensity;
-                                if (dist < coreSize) {
-                                    intensity = 1.0;
-                                } else {
-                                    intensity = 1.0 - smoothstep(coreSize, coreSize + gradientWidth, dist);
-                                }
-                                
-                                return max(0.0, intensity);
-                            }
+float starShape(vec2 pos, vec2 center, float size, float time) {
+    vec2 offset = pos - center;
+    
+    float rotation = time * 0.08;
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    vec2 q = vec2(
+        offset.x * cosR - offset.y * sinR,
+        offset.x * sinR + offset.y * cosR
+    );
+    
+    const float segments = 5.0;
+    const float indent = 0.05;
+    const float pi = 3.141592654;
+    
+    float angle = (atan(q.y, q.x) + pi) / (2.0 * pi);
+    float segment = angle * segments;
+    
+    float segmentI = floor(segment);
+    float segmentF = fract(segment);
+    
+    angle = (segmentI + 0.5) / segments;
+    
+    if (segmentF > 0.5) {
+        angle -= indent;
+    } else {
+        angle += indent;
+    }
+    
+    angle *= 2.0 * pi;
+    
+    vec2 outline = vec2(cos(angle), sin(angle));
+    float distance = abs(dot(outline, q)) / size;
+    
+    float cornerRadius = 0.35;
+    distance = distance - cornerRadius * (1.0 - distance);
+    
+    float gradientWidth = 0.6;
+    float coreSize = 0.05;
+    
+    float intensity;
+    if (distance < coreSize) {
+        intensity = 1.0;
+    } else {
+        intensity = 1.0 - smoothstep(coreSize, coreSize + gradientWidth, distance);
+    }
+    
+    return max(0.0, intensity);
+}
 
-                            float starShape(vec2 pos, vec2 center, float size, float time) {
-                                vec2 offset = pos - center;
-                                
-                                // Apply rotation
-                                float rotation = time * 0.15;
-                                float cosR = cos(rotation);
-                                float sinR = sin(rotation);
-                                vec2 q = vec2(
-                                    offset.x * cosR - offset.y * sinR,
-                                    offset.x * sinR + offset.y * cosR
-                                );
-                                
-                                const float segments = 5.0;
-                                const float indent = 0.05;
-                                const float pi = 3.141592654;
-                                
-                                float angle = (atan(q.y, q.x) + pi) / (2.0 * pi); // 0-1
-                                float segment = angle * segments;
-                                
-                                float segmentI = floor(segment);
-                                float segmentF = fract(segment);
-                                
-                                angle = (segmentI + 0.5) / segments;
-                                
-                                if (segmentF > 0.5) {
-                                    angle -= indent;
-                                } else {
-                                    angle += indent;
-                                }
-                                
-                                angle *= 2.0 * pi;
-                                
-                                vec2 outline = vec2(cos(angle), sin(angle));
-                                
-                                float distance = abs(dot(outline, q)) / size;
-                                
-                                float cornerRadius = 0.08;
-                                distance = distance - cornerRadius * (1.0 - distance);
-                                
-                                float gradientWidth = 0.6;
-                                float coreSize = 0.3;
-                                
-                                float intensity;
-                                if (distance < coreSize) {
-                                    intensity = 1.0; // Solid core
-                                } else {
-                                    intensity = 1.0 - smoothstep(coreSize, coreSize + gradientWidth, distance);
-                                }
-                                
-                                return max(0.0, intensity);
-                            }
+float triangleShape(vec2 pos, vec2 center, float size, float time) {
+    vec2 offset = pos - center;
+    
+    float rotation = time * 0.03;
+    float cosR = cos(rotation);
+    float sinR = sin(rotation);
+    vec2 rotatedOffset = vec2(
+        offset.x * cosR - offset.y * sinR,
+        offset.x * sinR + offset.y * cosR
+    );
+    
+    float triangleSize = size;
+    vec2 p = rotatedOffset / triangleSize;
+    
+    const float k = sqrt(3.0);
+    p.x = abs(p.x) - 1.0;
+    p.y = p.y + 1.0/k;
+    if (p.x + k*p.y > 0.0) p = vec2(p.x - k*p.y, -k*p.x - p.y) / 2.0;
+    p.x -= clamp(p.x, -2.0, 0.0);
+    
+    float triangleDist = -length(p) * sign(p.y) * triangleSize;
+    
+    float gradientWidth = size * 0.35;
+    float intensity = 1.0 - smoothstep(-gradientWidth * 0.2, gradientWidth, triangleDist);
+    
+    return max(0.0, intensity * intensity);
+}
 
-                            // Triangle shape with gradient falloff
-                            float triangleShape(vec2 pos, vec2 center, float size, float time) {
-                                vec2 offset = pos - center;
-                                
-                                // Rotate triangle slightly over time
-                                float rotation = time * 0.3;
-                                float cosR = cos(rotation);
-                                float sinR = sin(rotation);
-                                vec2 rotatedOffset = vec2(
-                                    offset.x * cosR - offset.y * sinR,
-                                    offset.x * sinR + offset.y * cosR
-                                );
-                                
-                                float triangleSize = size;
-                                vec2 p = rotatedOffset / triangleSize;
-                                
-                                const float k = sqrt(3.0);
-                                p.x = abs(p.x) - 1.0;
-                                p.y = p.y + 1.0/k;
-                                if (p.x + k*p.y > 0.0) p = vec2(p.x - k*p.y, -k*p.x - p.y) / 2.0;
-                                p.x -= clamp(p.x, -2.0, 0.0);
-                                
-                                float triangleDist = -length(p) * sign(p.y) * triangleSize;
-                                
-                                // Gradient falloff - saturated core with shorter gradient
-                                float gradientWidth = size * 0.35;
-                                float intensity = 1.0 - smoothstep(-gradientWidth * 0.2, gradientWidth, triangleDist);
-                                
-                                return max(0.0, intensity * intensity);
-                            }
+float getShapeIntensity(vec2 pos, vec2 center, float size, float time, int shapeType) {
+    if (shapeType == 1) {
+        return rectangleShape(pos, center, size, time);
+    } else if (shapeType == 2) {
+        return starShape(pos, center, size, time);
+    } else if (shapeType == 3) {
+        return triangleShape(pos, center, size, time);
+    } else {
+        return noiseBlob(pos, center, size, time);
+    }
+}
 
-                            // Universal shape function that routes to the correct shape
-                            float getShapeIntensity(vec2 pos, vec2 center, float size, float time, int shapeType) {
-                                if (shapeType == 1) {
-                                    return rectangleShape(pos, center, size, time);
-                                } else if (shapeType == 2) {
-                                    return starShape(pos, center, size, time);
-                                } else if (shapeType == 3) {
-                                    return triangleShape(pos, center, size, time);
-                                } else {
-                                    // Default: organic blob (shapeType == 0)
-                                    return noiseBlob(pos, center, size, time);
-                                }
-                            }
+void main() { 
+    // Column distortion effect
+    vec4 d = texture2D(u_column_lookup, vec2(vUv.x, 0.0)); 
+    float i = d.r * 255.0; 
+    float s = sin(i * 12.99) * 43758.5; 
+    float o = (fract(s) - 0.5) * u_distortion; 
+    vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
+    
+    // Background handling
+    vec3 backgroundColor = vec3(0.0);
+    bool hasAnyBackground = u_has_background || u_has_bg_color;
+    
+    if (u_has_background) {
+        vec2 backgroundUV = vUv;
+        backgroundUV.x += o * 0.1;
+        vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
+        backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
+    } else if (u_has_bg_color) {
+        backgroundColor = u_background_color;
+    }
 
-                            void main() { 
-                                vec4 d = texture2D(u_column_lookup, vec2(vUv.x, 0.0)); 
-                                float i = d.r * 255.0; 
-                                float s = sin(i * 12.99) * 43758.5; 
-                                float o = (fract(s) - 0.5) * u_distortion; 
-                                vec2 distortedUV = vec2(vUv.x + o, vUv.y); 
-                                
-                                // Background sampling with very light column distortion
-                                vec3 backgroundColor = vec3(0.0);
-                                bool hasAnyBackground = u_has_background || u_has_bg_color;
-                                
-                                if (u_has_background) {
-                                    // Image background
-                                    vec2 backgroundUV = vUv;
-                                    backgroundUV.x += o * 0.1;
-                                    vec2 clampedBackgroundUV = clamp(backgroundUV, vec2(0.0), vec2(1.0));
-                                    backgroundColor = texture2D(u_background_texture, clampedBackgroundUV).rgb * 0.85;    
-                                } else if (u_has_bg_color) {
-                                    // Solid color background
-                                    backgroundColor = u_background_color;
-                                }
+    // Aspect ratio correction
+    vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
+    vec2 blob1Corrected = vec2(u_blob1_pos.x * u_aspect, u_blob1_pos.y);
+    vec2 blob2Corrected = vec2(u_blob2_pos.x * u_aspect, u_blob2_pos.y);
+    vec2 blob3Corrected = vec2(u_blob3_pos.x * u_aspect, u_blob3_pos.y);
+    
+    // Mobile scaling
+    float mobileScale = u_aspect < 1.0 ? 0.8 : 1.0;
 
-                                vec2 aspectCorrected = vec2(distortedUV.x * u_aspect, distortedUV.y);
-                                vec2 blob1Corrected = vec2(u_blob1_pos.x * u_aspect, u_blob1_pos.y);
-                                vec2 blob2Corrected = vec2(u_blob2_pos.x * u_aspect, u_blob2_pos.y);
-                                vec2 blob3Corrected = vec2(u_blob3_pos.x * u_aspect, u_blob3_pos.y);
-                                
-                                // Scale blob sizes for mobile - make them bigger and more visible
-                                float mobileScale = u_aspect < 1.0 ? 1.5 : 1.0; // 50% bigger on mobile
+    // Calculate shape intensities
+    float intensity1 = 0.0;
+    if(u_use_blob_one) {
+        intensity1 = getShapeIntensity(aspectCorrected, blob1Corrected, u_size_one * mobileScale, u_time, u_shape_type_one);
+    }
 
-                                float intensity1 = 0.0;
-                                if(u_use_blob_one) {
-                                    intensity1 = getShapeIntensity(aspectCorrected, blob1Corrected, u_size_one * mobileScale, u_time, u_shape_type_one);
-                                }
+    float intensity2 = 0.0;
+    if(u_use_blob_two) {
+        intensity2 = getShapeIntensity(aspectCorrected, blob2Corrected, u_size_two * mobileScale, u_time + 100.0, u_shape_type_two);
+    }
 
-                                float intensity2 = 0.0;
-                                if(u_use_blob_two) {
-                                    intensity2 = getShapeIntensity(aspectCorrected, blob2Corrected, u_size_two * mobileScale, u_time + 100.0, u_shape_type_two);
-                                }
-
-                                float intensity3 = 0.0;
-                                if(u_use_three_color) {
-                                    intensity3 = getShapeIntensity(aspectCorrected, blob3Corrected, u_size_three * mobileScale, u_time + 200.0, u_shape_type_three);
-                                }
-                                
-                                float maxIntensity = max(max(intensity1, intensity2), intensity3);
-                                
-                                if (maxIntensity <= 0.0) {
-                                    if (hasAnyBackground) {
-                                        vec3 c = backgroundColor; 
-                                        float g = (random(vUv * 0.5) - 0.5) * u_noise * 0.08; 
-                                        c += g;
-                                        gl_FragColor = vec4(c, 1.0);
-                                    } else {
-                                        gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
-                                    }
-                                    return;
-                                }
-                                
-                                vec3 blendedColor = vec3(0.0);
-                                float totalWeight = intensity1 + intensity2 + intensity3;
-                                
-                                if (totalWeight > 0.0) {
-                                    blendedColor = (u_color_one * intensity1 + u_color_two * intensity2 + u_color_three * intensity3) / totalWeight;
-                                }
-                                
-                                vec3 finalColor;
-                                if (hasAnyBackground) {
-                                    finalColor = mix(backgroundColor, blendedColor, maxIntensity);
-                                } else {
-                                    finalColor = blendedColor;
-                                }
-                                
-                                vec3 c = finalColor; 
-                                float g = (random(vUv * 0.5) - 0.5) * u_noise * 0.12; 
-                                c += g; 
-                                
-                                float alpha = hasAnyBackground ? 1.0 : maxIntensity;
-                                gl_FragColor = vec4(c, alpha);
-                            }`
+    float intensity3 = 0.0;
+    if(u_use_three_color) {
+        intensity3 = getShapeIntensity(aspectCorrected, blob3Corrected, u_size_three * mobileScale, u_time + 200.0, u_shape_type_three);
+    }
+    
+    float maxIntensity = max(max(intensity1, intensity2), intensity3);
+    
+    // Handle background-only areas
+    if (maxIntensity <= 0.0) {
+        if (hasAnyBackground) {
+            vec3 c = backgroundColor; 
+            float g = (random(vUv * 0.5) - 0.5) * u_noise * 0.08; 
+            c += g;
+            gl_FragColor = vec4(c, 1.0);
+        } else {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
+        }
+        return;
+    }
+    
+    // Alpha compositing - like layering PNG images with transparent gradients
+    vec3 blendedColor = vec3(0.0);
+    float totalAlpha = 0.0;
+    
+    // Start with transparent background
+    vec3 currentColor = vec3(0.0);
+    float currentAlpha = 0.0;
+    
+    // Layer Shape 1 (bottom) - alpha composite over transparent
+    if (intensity1 > 0.0) {
+        currentColor = u_color_one;
+        currentAlpha = intensity1;
+    }
+    
+    // Layer Shape 2 over Shape 1 using alpha compositing
+    if (intensity2 > 0.0) {
+        float srcAlpha = intensity2;
+        float dstAlpha = currentAlpha;
+        float outAlpha = srcAlpha + dstAlpha * (1.0 - srcAlpha);
+        
+        if (outAlpha > 0.0) {
+            currentColor = (u_color_two * srcAlpha + currentColor * dstAlpha * (1.0 - srcAlpha)) / outAlpha;
+            currentAlpha = outAlpha;
+        }
+    }
+    
+    // Layer Shape 3 over everything using alpha compositing
+    if (intensity3 > 0.0) {
+        float srcAlpha = intensity3;
+        float dstAlpha = currentAlpha;
+        float outAlpha = srcAlpha + dstAlpha * (1.0 - srcAlpha);
+        
+        if (outAlpha > 0.0) {
+            currentColor = (u_color_three * srcAlpha + currentColor * dstAlpha * (1.0 - srcAlpha)) / outAlpha;
+            currentAlpha = outAlpha;
+        }
+    }
+    
+    blendedColor = currentColor;
+    maxIntensity = currentAlpha;
+    
+    // Final color mixing with background
+    vec3 finalColor;
+    if (hasAnyBackground) {
+        finalColor = mix(backgroundColor, blendedColor, maxIntensity);
+    } else {
+        finalColor = blendedColor;
+    }
+    
+    // Add noise texture
+    vec3 c = finalColor; 
+    float g = (random(vUv * 0.5) - 0.5) * u_noise * 0.12; 
+    c += g; 
+    
+    float alpha = hasAnyBackground ? 1.0 : maxIntensity;
+    gl_FragColor = vec4(c, alpha);
+}`
                         });
                         state.plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), state.material); 
                         state.scene.add(state.plane); 
@@ -563,18 +576,21 @@ function initializeOptimizedShaders() {
                             timeOffset: Math.random() * Math.PI * 2,
                             fadeProgress: 0.0
                         };
-                        const blobs = { b1: new THREE.Vector2(0.3, 0.7), b2: new THREE.Vector2(0.6, 0.1), b3: new THREE.Vector2(0.9, 0.5) }; 
+                        const blobs = { 
+                            b1: new THREE.Vector2(0.15, 0.7), 
+                            b2: new THREE.Vector2(0.5, 0.2), 
+                            b3: new THREE.Vector2(0.85, 0.6) }; 
                         const mousePos = new THREE.Vector2(0.5, 0.5);
                         const defaultTargets = { 
-                            b1: new THREE.Vector2(0.3, 0.7), 
-                            b2: new THREE.Vector2(0.6, 0.1), 
-                            b3: new THREE.Vector2(0.9, 0.5) 
+                            b1: new THREE.Vector2(0.25, 0.6), 
+                            b2: new THREE.Vector2(0.45, 0.3), 
+                            b3: new THREE.Vector2(0.75, 0.7) 
                         };
                         
                         const originalPositions = {
-                            b1: new THREE.Vector2(0.3, 0.7),
-                            b2: new THREE.Vector2(0.6, 0.1), 
-                            b3: new THREE.Vector2(0.9, 0.5)
+                            b1: new THREE.Vector2(0.15, 0.7),
+                            b2: new THREE.Vector2(0.5, 0.2), 
+                            b3: new THREE.Vector2(0.85, 0.6)
                         };
                         
                       const instanceController = { 
@@ -592,37 +608,37 @@ function initializeOptimizedShaders() {
                                 
                                 // If reduced motion is enabled, keep shapes at their original positions
                                 if (prefersReducedMotion) {
-                                    defaultTargets.b1.set(0.3, 0.7);
-                                    defaultTargets.b2.set(0.6, 0.1);
-                                    defaultTargets.b3.set(0.9, 0.5);
+                                    defaultTargets.b1.set(0.25, 0.6);
+                                    defaultTargets.b2.set(0.45, 0.3);
+                                    defaultTargets.b3.set(0.75, 0.7);
                                 } else {
                                     // Normal animation behavior
                                     const slowTime = timeInSeconds * 0.4;
                                     const mediumTime = timeInSeconds * 0.6;
                                     const fastTime = timeInSeconds * 0.8;
                                     
-                                    defaultTargets.b1.x = 0.3 + Math.sin(slowTime * 0.7) * 0.15 + Math.cos(fastTime * 0.3) * 0.08;
-                                    defaultTargets.b1.y = 0.7 + Math.cos(slowTime * 0.9) * 0.12 + Math.sin(mediumTime * 0.5) * 0.06;
+                                    defaultTargets.b1.x = 0.25 + Math.sin(slowTime * 0.7) * 0.05 + Math.cos(fastTime * 0.3) * 0.03;
+                                    defaultTargets.b1.y = 0.6 + Math.cos(slowTime * 0.9) * 0.04 + Math.sin(mediumTime * 0.5) * 0.02;
                                     
-                                    defaultTargets.b2.x = 0.6 + Math.cos(mediumTime * 0.8) * 0.18 + Math.sin(slowTime * 0.4) * 0.07;
-                                    defaultTargets.b2.y = 0.1 + Math.sin(mediumTime * 0.6) * 0.14 + Math.cos(fastTime * 0.7) * 0.05;
+                                    defaultTargets.b2.x = 0.45 + Math.cos(mediumTime * 0.8) * 0.06 + Math.sin(slowTime * 0.4) * 0.0025;
+                                    defaultTargets.b2.y = 0.3 + Math.sin(mediumTime * 0.6) * 0.045 + Math.cos(fastTime * 0.7) * 0.02;
                                     
-                                    defaultTargets.b3.x = 0.9 + Math.sin(fastTime * 0.5) * 0.16 + Math.cos(slowTime * 0.8) * 0.09;
-                                    defaultTargets.b3.y = 0.5 + Math.cos(fastTime * 0.4) * 0.13 + Math.sin(slowTime * 0.6) * 0.07;
+                                    defaultTargets.b3.x = 0.75 + Math.sin(fastTime * 0.5) * 0.055 + Math.cos(slowTime * 0.8) * 0.03;
+                                    defaultTargets.b3.y = 0.7 + Math.cos(fastTime * 0.4) * 0.04 + Math.sin(slowTime * 0.6) * 0.025;
                                 }
                                 
                                 if (state.settings.hoverEnabled && animState.isHovering) {
                                     const offsetX = (mousePos.x - 0.5) * 2;
                                     const offsetY = (mousePos.y - 0.5) * 2;
                                     
-                                    const parallax1X = offsetX * 0.08;
-                                    const parallax1Y = offsetY * 0.06;
+                                    const parallax1X = offsetX * 0.06;
+                                    const parallax1Y = offsetY * 0.045;
                                     
-                                    const parallax2X = offsetX * -0.05;
-                                    const parallax2Y = offsetY * -0.04;
+                                    const parallax2X = offsetX * -0.04;
+                                    const parallax2Y = offsetY * -0.03;
                                     
-                                    const parallax3X = offsetX * 0.04;
-                                    const parallax3Y = offsetY * 0.03;
+                                    const parallax3X = offsetX * 0.03;
+                                    const parallax3Y = offsetY * 0.025;
                                     
                                     const targetWithParallax1 = new THREE.Vector2(
                                         defaultTargets.b1.x + parallax1X,
@@ -639,9 +655,9 @@ function initializeOptimizedShaders() {
                                         defaultTargets.b3.y + parallax3Y
                                     );
                                     
-                                    blobs.b1.lerp(targetWithParallax1, 0.08);
-                                    blobs.b2.lerp(targetWithParallax2, 0.06); 
-                                    blobs.b3.lerp(targetWithParallax3, 0.04);
+                                    blobs.b1.lerp(targetWithParallax1, 0.04);
+                                    blobs.b2.lerp(targetWithParallax2, 0.03); 
+                                    blobs.b3.lerp(targetWithParallax3, 0.02);
                                     
                                 } else {
                                     blobs.b1.lerp(defaultTargets.b1, 0.025); 
