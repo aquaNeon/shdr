@@ -6,7 +6,6 @@
     function initializeOptimizedShaders() {
         if (typeof THREE === 'undefined') { console.error("Shader Error: Three.js missing."); return; }
         
-        // Check for reduced motion preference
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         
         const perfConfig = { 
@@ -66,7 +65,6 @@
             texture.needsUpdate = true; return texture; 
         }
 
-        // Background image loading functions
         function createFallbackTexture() {
             const size = 256;
             const data = new Uint8Array(size * size * 3);
@@ -109,7 +107,6 @@
             });
         }
 
-        // Create heavily blurred texture ONCE during initialization
         function createHeavyBlurTexture(originalTexture) {
             return new Promise((resolve) => {
                 if (!originalTexture) {
@@ -118,22 +115,18 @@
                 }
                 
                 try {                
-                    // Create temporary canvas for blur
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     canvas.width = 512;
                     canvas.height = 512;
                     
-                    // Create temporary image to draw texture
                     const tempImg = new Image();
                     tempImg.crossOrigin = 'anonymous';
                     
                     tempImg.onload = function() {
-                        // Apply heavy CSS filter blur to canvas context
                         ctx.filter = 'blur(15px)'; 
                         ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
                         
-                        // Create texture from the blurred canvas
                         const loader = new THREE.TextureLoader();
                         loader.load(canvas.toDataURL(), (blurredTexture) => {
                             blurredTexture.wrapS = THREE.ClampToEdgeWrapping;
@@ -171,6 +164,21 @@
                             const p = container.getAttribute('data-width-preset') || 'minimal'; 
                             const ps = { 'balanced': { c: 5, v: 1.0, d: 0.2 }, 'extremes': { c: 4, v: 1.8, d: 0.15 }, 'minimal': { c: 3, v: 1.5, d: 0.1 }, 'dense': { c: 7, v: 0.8, d: 0.25 } }; 
                             const c = ps[p] || ps['balanced'];
+
+                            let backgroundImageUrl = null;
+                            
+                            const hiddenImage = container.querySelector('.fluted-glass-image');
+                            if (hiddenImage && 
+                                hiddenImage.tagName === 'IMG' && 
+                                hiddenImage.src && 
+                                !hiddenImage.src.includes('placeholder') &&
+                                !hiddenImage.src.includes('default') &&
+                                !hiddenImage.src.includes('.svg')) {
+                                backgroundImageUrl = hiddenImage.src;
+                            } else {
+                                backgroundImageUrl = container.getAttribute('data-background-image') || null;
+                            }
+
                             state.settings = { 
                                 columns: parseInt(container.getAttribute('data-columns')) || c.c, 
                                 noise: parseFloat(container.getAttribute('data-noise')) || (state.isLowQuality ? 0.015 : 0.035),
@@ -180,18 +188,15 @@
                                 sensitivityTwo: parseFloat(container.getAttribute('data-sensitivity-two')) || 0.05, 
                                 sensitivityThree: parseFloat(container.getAttribute('data-sensitivity-three')) || 0.1,
                                 hoverIntensity: parseFloat(container.getAttribute('data-hover-intensity')) || 1.0,
-                                // Force disable hover if reduced motion is enabled
                                 hoverEnabled: prefersReducedMotion ? false : (container.getAttribute('data-hover') !== 'false'),
-                                backgroundImage: container.getAttribute('data-background-image') || null,
+                                backgroundImage: backgroundImageUrl,
                                 backgroundColor: container.getAttribute('data-bg-color') || null
                             };
                             const boundaries = generateColumnBoundaries(state.settings.columns, state.settings.widthVariation, parseInt(container.getAttribute('data-seed')) || 1234);
                             state.lookupTexture = generateLookupTexture(boundaries); 
                             
-                            // Load original image
                             state.backgroundTexture = await loadBackgroundTexture(state.settings.backgroundImage);
                             
-                            // Create heavily blurred version ONCE
                             state.blurredBackgroundTexture = await createHeavyBlurTexture(state.backgroundTexture);
                             
                             setTimeout(() => runStep(1), 20);
@@ -599,7 +604,6 @@
                                     if (renderBudgetExceeded) return;
                                     if (time - animState.lastRenderTime < 33) return;
                                     
-                                    // Fade-in logic
                                     if (animState.fadeProgress < 1.0 && animState.isVisible) {
                                         animState.fadeProgress = Math.min(1.0, animState.fadeProgress + 0.05);
                                         state.renderer.domElement.style.opacity = animState.fadeProgress;
@@ -607,13 +611,11 @@
                                     
                                     const timeInSeconds = (time + animState.timeOffset) * 0.0008;
                                     
-                                    // If reduced motion is enabled, keep shapes at their original positions
                                     if (prefersReducedMotion) {
                                         defaultTargets.b1.set(0.25, 0.6);
                                         defaultTargets.b2.set(0.45, 0.3);
                                         defaultTargets.b3.set(0.75, 0.7);
                                     } else {
-                                        // Normal animation behavior
                                         const slowTime = timeInSeconds * 0.4;
                                         const mediumTime = timeInSeconds * 0.6;
                                         const fastTime = timeInSeconds * 0.8;
